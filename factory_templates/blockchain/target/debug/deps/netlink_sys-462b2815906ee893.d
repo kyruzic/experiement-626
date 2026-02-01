@@ -1,0 +1,10 @@
+/home/kyruzic/dev/army/factory_templates/blockchain/target/debug/deps/netlink_sys-462b2815906ee893.d: /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/lib.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/constants.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/socket.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/addr.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/async_socket.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/async_socket_ext.rs
+
+/home/kyruzic/dev/army/factory_templates/blockchain/target/debug/deps/libnetlink_sys-462b2815906ee893.rmeta: /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/lib.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/constants.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/socket.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/addr.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/async_socket.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/async_socket_ext.rs
+
+/home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/lib.rs:
+/home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/constants.rs:
+/home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/socket.rs:
+/home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/addr.rs:
+/home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/async_socket.rs:
+/home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/netlink-sys-0.8.8/src/async_socket_ext.rs:

@@ -1,0 +1,14 @@
+/home/kyruzic/dev/army/factory_templates/blockchain/target/debug/deps/clang_sys-9669a3f6aece56ba.d: /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/lib.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/support.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/link.rs /home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/macros.rs /home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/common.rs /home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/dynamic.rs
+
+/home/kyruzic/dev/army/factory_templates/blockchain/target/debug/deps/libclang_sys-9669a3f6aece56ba.rlib: /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/lib.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/support.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/link.rs /home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/macros.rs /home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/common.rs /home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/dynamic.rs
+
+/home/kyruzic/dev/army/factory_templates/blockchain/target/debug/deps/libclang_sys-9669a3f6aece56ba.rmeta: /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/lib.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/support.rs /home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/link.rs /home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/macros.rs /home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/common.rs /home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/dynamic.rs
+
+/home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/lib.rs:
+/home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/support.rs:
+/home/kyruzic/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/clang-sys-1.8.1/src/link.rs:
+/home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/macros.rs:
+/home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/common.rs:
+/home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out/dynamic.rs:
+
+# env-dep:OUT_DIR=/home/kyruzic/dev/army/factory_templates/blockchain/target/debug/build/clang-sys-397fb9b14d8eb919/out

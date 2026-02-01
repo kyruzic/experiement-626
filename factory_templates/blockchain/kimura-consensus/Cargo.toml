@@ -1,0 +1,27 @@
+[package]
+name = "kimura-consensus"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+kimura-storage = { path = "../kimura-storage" }
+kimura-network = { path = "../kimura-network" }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+sha2 = { workspace = true }
+blake3 = { workspace = true }
+secp256k1 = { workspace = true }
+async-trait = "0.1"
+futures = "0.3"
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+mockall = { workspace = true }
+tempfile = { workspace = true }

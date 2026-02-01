@@ -1,0 +1,5 @@
+warning: no edition set: defaulting to the 2015 edition while the latest is 2024
+    Updating crates.io index
+error: no matching package named `crypto-md5` found
+location searched: crates.io index
+required by package `kimimura_blockchain_service v1.0.0 (/home/kyruzic/dev/army/kimimura_blockchain_service)`

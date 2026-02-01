@@ -1,0 +1,37 @@
+[workspace]
+members = [
+    "kimura-node",
+    "kimura-consensus",
+    "kimura-network",
+    "kimura-storage",
+    "kimura-blockchain",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Blockchain Engineer"]
+license = "MIT"
+repository = "https://github.com/ai-spam-defense/kimura-blockchain"
+
+[workspace.dependencies]
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Blockchain specific
+libp2p = { version = "0.53", features = ["tcp", "tls", "yamux", "noise", "kad", "gossipsub"] }
+rocksdb = { version = "0.21" }
+sha2 = "0.10"
+blake3 = "1.5"
+secp256k1 = { version = "0.28", features = ["rand", "global-context"] }
+
+# Testing
+tokio-test = "0.4"
+mockall = "0.12"
+tempfile = "3.9"
