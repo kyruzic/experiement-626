@@ -34,6 +34,10 @@ struct Cli {
     /// Log level
     #[arg(long, global = true, default_value = "info")]
     log_level: String,
+
+    /// RPC server port (0 = auto-assign)
+    #[arg(long, global = true, default_value = "0")]
+    rpc_port: u16,
 }
 
 #[derive(Subcommand)]
@@ -118,14 +122,18 @@ async fn run_node(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(1);
     }
 
-    let node = match Node::new(config) {
-        Ok(node) => node,
+    // Create node with RPC server enabled
+    let (node, rpc_port) = match Node::new_with_rpc(config).await {
+        Ok((node, port)) => (node, port),
         Err(e) => {
             error!("Failed to create node: {}", e);
             std::process::exit(1);
         }
     };
 
+    // Print RPC port to stdout for test discovery
+    println!("RPC server started on port {}", rpc_port);
+    info!("RPC server started on port {}", rpc_port);
     info!("Node initialized, starting main loop...");
 
     if let Err(e) = node.run().await {
@@ -215,5 +223,6 @@ fn create_config(cli: &Cli) -> NodeConfig {
         leader_addr: cli.leader_addr.clone(),
         block_interval_secs: cli.block_interval_secs,
         log_level: cli.log_level.clone(),
+        rpc_port: cli.rpc_port,
     }
 }

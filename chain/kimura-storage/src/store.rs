@@ -1,5 +1,5 @@
-use crate::database::{CF_BLOCKS, CF_MESSAGES, CF_METADATA, DatabaseError, RocksDB};
-use serde::{Serialize, de::DeserializeOwned};
+use crate::database::{DatabaseError, RocksDB, CF_BLOCKS, CF_MESSAGES, CF_METADATA};
+use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
 
 /// Prefix for block keys (single byte like Geth)
@@ -146,6 +146,27 @@ impl MessageStore {
             }
             None => Ok(None),
         }
+    }
+
+    /// Get all messages from the messages column family
+    pub fn get_all_messages<T: DeserializeOwned>(&self) -> Result<Vec<T>, StorageError> {
+        let cf = self
+            .db
+            .inner()
+            .cf_handle(CF_MESSAGES)
+            .ok_or_else(|| DatabaseError::ColumnFamilyNotFound(CF_MESSAGES.to_string()))?;
+
+        let mut iter = self.db.inner().raw_iterator_cf(cf);
+        iter.seek_to_first();
+
+        let mut results = Vec::new();
+        while let Some((_key, value)) = iter.item() {
+            let message: T = serde_json::from_slice(value)?;
+            results.push(message);
+            iter.next();
+        }
+
+        Ok(results)
     }
 }
 

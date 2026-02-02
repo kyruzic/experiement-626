@@ -3,9 +3,12 @@
 //! These tests verify end-to-end functionality by running actual kimura-node binaries
 //! and testing via HTTP RPC calls.
 
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
 use std::time::Duration;
 
 mod rpc_client;
@@ -19,8 +22,31 @@ use tracing::info;
 const TEST_BLOCK_INTERVAL: u64 = 1;
 /// Test network base port
 const TEST_BASE_PORT: u16 = 15000;
-/// Path to kimura-node binary
-const KIMURA_NODE_BIN: &str = "target/release/kimura-node";
+
+/// Get the path to the kimura-node binary
+fn get_kimura_node_bin() -> PathBuf {
+    // Start from the workspace root (where Cargo.toml is)
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace root")
+        .to_path_buf();
+    
+    let bin_path = if cfg!(debug_assertions) {
+        workspace_root.join("target/debug/kimura-node")
+    } else {
+        workspace_root.join("target/release/kimura-node")
+    };
+    
+    // Verify the binary exists
+    if !bin_path.exists() {
+        panic!(
+            "kimura-node binary not found at {:?}. Please build with: cargo build --release -p kimura-node",
+            bin_path
+        );
+    }
+    
+    bin_path
+}
 
 /// Test wrapper around a running kimura-node process
 pub struct TestNode {
@@ -52,35 +78,39 @@ pub struct NodeConfig {
 
 impl TestNode {
     /// Create and start a new test node as leader with RPC
-    pub async fn new_leader(port: u16) -> Self {
+    pub async fn new_leader(port: u16, rpc_port: u16) -> Self {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("db");
         let listen_addr = format!("/ip4/127.0.0.1/tcp/{}", port);
         
         // Build command to start leader node
-        let mut cmd = Command::new(KIMURA_NODE_BIN);
+        let mut cmd = Command::new(get_kimura_node_bin());
         cmd.arg("--leader")
             .arg("--db-path")
             .arg(&db_path)
             .arg("--listen-addr")
             .arg(&listen_addr)
-            .arg("--block-interval")
-            .arg(TEST_BLOCK_INTERVAL.to_string())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .arg("--rpc-port")
+            .arg(rpc_port.to_string())
+            .arg("--block-interval-secs")
+            .arg(TEST_BLOCK_INTERVAL.to_string());
+        
+        // Pass RUST_LOG to child process and inherit stdout/stderr for debugging
+        if std::env::var("RUST_LOG").is_ok() {
+            cmd.env("RUST_LOG", std::env::var("RUST_LOG").unwrap());
+            cmd.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+        } else {
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        }
         
         info!("Starting leader node: {:?}", cmd);
         
-        let mut child = cmd.spawn().expect("Failed to start kimura-node leader");
+        let child = cmd.spawn().expect("Failed to start kimura-node leader");
         
-        // Wait a bit for the node to start and print RPC port
+        // Wait a bit for the node to start
         sleep(Duration::from_millis(500)).await;
         
-        // Try to find RPC port from the process
-        // The node should print something like "RPC server started on port XXXX"
-        let rpc_port = wait_for_rpc_port(&mut child, Duration::from_secs(5)).await
-            .expect("Failed to get RPC port from leader");
-        
+        // RPC port is now known since we specify it
         info!("Leader node started with RPC on port {}", rpc_port);
         
         let rpc_client = RpcClient::new(rpc_port);
@@ -109,36 +139,41 @@ impl TestNode {
     }
     
     /// Create and start a new test node as peer with RPC
-    pub async fn new_peer(port: u16, leader_port: u16) -> Self {
+    pub async fn new_peer(port: u16, rpc_port: u16, leader_port: u16) -> Self {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("db");
         let listen_addr = format!("/ip4/127.0.0.1/tcp/{}", port);
         let leader_addr = format!("/ip4/127.0.0.1/tcp/{}", leader_port);
         
         // Build command to start peer node
-        let mut cmd = Command::new(KIMURA_NODE_BIN);
+        let mut cmd = Command::new(get_kimura_node_bin());
         cmd.arg("--db-path")
             .arg(&db_path)
             .arg("--listen-addr")
             .arg(&listen_addr)
             .arg("--leader-addr")
             .arg(&leader_addr)
-            .arg("--block-interval")
-            .arg(TEST_BLOCK_INTERVAL.to_string())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .arg("--rpc-port")
+            .arg(rpc_port.to_string())
+            .arg("--block-interval-secs")
+            .arg(TEST_BLOCK_INTERVAL.to_string());
+        
+        // Pass RUST_LOG to child process and inherit stdout/stderr for debugging
+        if std::env::var("RUST_LOG").is_ok() {
+            cmd.env("RUST_LOG", std::env::var("RUST_LOG").unwrap());
+            cmd.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+        } else {
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        }
         
         info!("Starting peer node: {:?}", cmd);
         
-        let mut child = cmd.spawn().expect("Failed to start kimura-node peer");
+        let child = cmd.spawn().expect("Failed to start kimura-node peer");
         
         // Wait a bit for the node to start
         sleep(Duration::from_millis(500)).await;
         
-        // Try to find RPC port from the process
-        let rpc_port = wait_for_rpc_port(&mut child, Duration::from_secs(5)).await
-            .expect("Failed to get RPC port from peer");
-        
+        // RPC port is now known since we specify it
         info!("Peer node started with RPC on port {}", rpc_port);
         
         let rpc_client = RpcClient::new(rpc_port);
@@ -226,30 +261,17 @@ impl Drop for TestNode {
     }
 }
 
-/// Wait for RPC port to be printed by the node process
-async fn wait_for_rpc_port(child: &mut Child, max_wait: Duration) -> Option<u16> {
-    let start = tokio::time::Instant::now();
+/// Wait for RPC port to be ready (port is now specified, just wait for it to be active)
+async fn wait_for_rpc_port(rpc_port: u16, _max_wait: Duration) -> Option<u16> {
+    // Give the node time to start the RPC server
+    sleep(Duration::from_millis(1000)).await;
     
-    // For now, use a simple heuristic: try common RPC ports
-    // In a real implementation, we'd parse stdout/stderr
-    // The RPC server binds to port 0, so we need to parse the actual port
-    
-    // Try to read from stderr/stdout to find the port
-    // This is a simplified version - in practice we'd parse the output
-    
-    // For testing, we'll try ports in a range
-    // This is a workaround until we implement proper output parsing
-    sleep(Duration::from_millis(500)).await;
-    
-    // Try to find an open RPC port by checking health endpoint
-    for port in 8000..9000 {
-        let client = RpcClient::new(port);
-        if timeout(Duration::from_millis(50), client.health()).await.is_ok() {
-            return Some(port);
-        }
+    // Verify the RPC port is active
+    let client = RpcClient::new(rpc_port);
+    match timeout(Duration::from_millis(100), client.health()).await {
+        Ok(Ok(_)) => Some(rpc_port),
+        _ => None,
     }
-    
-    None
 }
 
 /// Wait for a specific block height via RPC polling
@@ -312,7 +334,7 @@ pub async fn verify_chain_equality_rpc(
 async fn test_leader_produces_blocks_rpc() {
     info!("Starting test_leader_produces_blocks_rpc");
 
-    let leader = TestNode::new_leader(TEST_BASE_PORT).await;
+    let leader = TestNode::new_leader(TEST_BASE_PORT, 18000).await;
 
     // Wait for blocks to be produced
     let height = wait_for_height_rpc(&leader, 2, Duration::from_secs(10))
@@ -337,7 +359,7 @@ async fn test_peer_receives_blocks_rpc() {
     info!("Starting test_peer_receives_blocks_rpc");
 
     // Start leader
-    let leader = TestNode::new_leader(TEST_BASE_PORT + 10).await;
+    let leader = TestNode::new_leader(TEST_BASE_PORT + 10, 18001).await;
 
     // Wait for leader to produce initial blocks
     let initial_height = wait_for_height_rpc(&leader, 2, Duration::from_secs(10))
@@ -345,7 +367,10 @@ async fn test_peer_receives_blocks_rpc() {
         .expect("Leader should produce blocks");
 
     // Start peer
-    let peer = TestNode::new_peer(TEST_BASE_PORT + 11, TEST_BASE_PORT + 10).await;
+    let peer = TestNode::new_peer(TEST_BASE_PORT + 11, 18002, TEST_BASE_PORT + 10).await;
+
+    // Give time for P2P connection to establish
+    sleep(Duration::from_millis(500)).await;
 
     // Wait for peer to receive NEW blocks (published after connection)
     let target_height = initial_height + 2;
@@ -372,7 +397,7 @@ async fn test_multi_peer_sync_rpc() {
     info!("Starting test_multi_peer_sync_rpc");
 
     // Start leader
-    let leader = TestNode::new_leader(TEST_BASE_PORT + 20).await;
+    let leader = TestNode::new_leader(TEST_BASE_PORT + 20, 18003).await;
     
     // Wait for initial blocks
     let initial_height = wait_for_height_rpc(&leader, 2, Duration::from_secs(10))
@@ -380,8 +405,11 @@ async fn test_multi_peer_sync_rpc() {
         .expect("Leader should produce blocks");
 
     // Start peers
-    let peer1 = TestNode::new_peer(TEST_BASE_PORT + 21, TEST_BASE_PORT + 20).await;
-    let peer2 = TestNode::new_peer(TEST_BASE_PORT + 22, TEST_BASE_PORT + 20).await;
+    let peer1 = TestNode::new_peer(TEST_BASE_PORT + 21, 18004, TEST_BASE_PORT + 20).await;
+    let peer2 = TestNode::new_peer(TEST_BASE_PORT + 22, 18005, TEST_BASE_PORT + 20).await;
+
+    // Give time for P2P connection to establish
+    sleep(Duration::from_millis(500)).await;
 
     // Wait for new blocks to be produced after all peers connect
     let target_height = initial_height + 3;
@@ -412,7 +440,7 @@ async fn test_message_inclusion_rpc() {
     info!("Starting test_message_inclusion_rpc");
 
     // Start leader
-    let leader = TestNode::new_leader(TEST_BASE_PORT + 30).await;
+    let leader = TestNode::new_leader(TEST_BASE_PORT + 30, 18006).await;
 
     // Wait for genesis
     wait_for_height_rpc(&leader, 0, Duration::from_secs(5))
@@ -456,7 +484,7 @@ async fn test_chain_continuity_rpc() {
     info!("Starting test_chain_continuity_rpc");
 
     // Start leader and produce some blocks
-    let leader = TestNode::new_leader(TEST_BASE_PORT + 40).await;
+    let leader = TestNode::new_leader(TEST_BASE_PORT + 40, 18007).await;
 
     // Wait for multiple blocks
     wait_for_height_rpc(&leader, 5, Duration::from_secs(10))

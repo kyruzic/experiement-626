@@ -178,17 +178,20 @@ impl NodeServices {
 
     /// Collect all pending messages for block production
     pub fn collect_pending_messages(&self) -> Result<Vec<kimura_blockchain::Message>, NodeError> {
-        // For M1, we use a simple approach: query messages by iterating
-        // In production, you'd want an indexed pending queue
-        // For now, return empty (will be implemented with proper indexing)
         debug!("Collecting pending messages");
-        Ok(vec![])
+        let messages = self
+            .message_store
+            .get_all_messages::<kimura_blockchain::Message>()
+            .map_err(|e| NodeError::Storage(e.into()))?;
+        info!("Collected {} pending messages", messages.len());
+        Ok(messages)
     }
 
     /// Clear the pending message queue after block production
     pub fn clear_pending_messages(&self) -> Result<(), NodeError> {
-        // Placeholder - will be implemented with proper pending queue management
-        debug!("Clearing pending messages");
+        // For now, we don't delete messages from the store
+        // In production, you'd want to track which messages have been included in blocks
+        debug!("Clearing pending messages (noop)");
         Ok(())
     }
 
@@ -239,6 +242,7 @@ mod tests {
             leader_addr: None,
             block_interval_secs: 5,
             log_level: "info".to_string(),
+            rpc_port: 0,
         }
     }
 

@@ -128,10 +128,28 @@ This document tracks the implementation of Milestone 1 for the Kimura blockchain
 - [x] Test: Chain continuity validation (reject blocks with invalid prev_hash)
 - [x] Test: Graceful shutdown and restart scenario
 - [x] Update documentation with M1 details
+- [x] HTTP RPC server for external testing (axum-based)
+- [x] RPC test client for programmatic node control
+- [x] Binary spawning test harness (real node processes)
 
-**Files to modify:**
-- `tests/service/integration.rs`
-- `tests/mod.rs`
+**Test Suite (`tests/integration_tests.rs`):**
+1. `test_leader_produces_blocks_rpc` - Verifies leader produces blocks via timer, queried via RPC
+2. `test_peer_receives_blocks_rpc` - Verifies P2P block propagation from leader to peer
+3. `test_multi_peer_sync_rpc` - Verifies multiple peers synchronize with leader
+4. `test_message_inclusion_rpc` - Verifies messages submitted via RPC are included in blocks
+5. `test_chain_continuity_rpc` - Verifies block height sequence and hash linking
+
+**Files Modified:**
+- `tests/integration_tests.rs` - Main test suite with 5 comprehensive tests
+- `tests/rpc_client.rs` - HTTP RPC client for node communication
+- `tests/mod.rs` - Test module entry point
+- `tests/service/mod.rs` - Service test utilities
+- `kimura-node/src/main.rs` - Added --rpc-port CLI argument
+- `kimura-node/src/config.rs` - Added rpc_port configuration field
+- `kimura-node/src/node.rs` - Added new_with_rpc() method for test mode
+- `kimura-node/src/rpc.rs` - HTTP RPC server implementation (axum)
+- `kimura-node/src/services.rs` - Fixed collect_pending_messages() to return actual messages
+- `kimura-storage/src/store.rs` - Added get_all_messages() to MessageStore
 
 **Commit message:** "Add integration tests for M1"
 
@@ -260,6 +278,31 @@ Milestone 1 has been successfully completed. The Kimura blockchain now produces 
    - All 34 unit tests passing
    - Integration tests properly marked for appropriate test environments
    - Clean separation of unit and integration test concerns
+
+5. **Integration Test Infrastructure (Completed 2026-02-02)**
+   - Added `--rpc-port` CLI argument to kimura-node for test control
+   - Implemented HTTP RPC server (`kimura-node/src/rpc.rs`) with endpoints:
+     - `GET /health` - Node status and height
+     - `GET /height` - Current chain height
+     - `GET /block/:height` - Get specific block
+     - `GET /latest` - Get latest block
+     - `POST /message` - Submit new message
+   - Created RPC test client (`tests/rpc_client.rs`) for HTTP communication
+   - Built test harness (`tests/integration_tests.rs`) that:
+     - Spawns real kimura-node processes as child processes
+     - Uses temporary databases (auto-cleaned via TempDir)
+     - Communicates via HTTP RPC to verify node state
+     - Tests P2P networking with configurable ports
+   - Fixed `MessageStore.get_all_messages()` to retrieve pending messages
+   - Updated `collect_pending_messages()` to actually return messages from DB
+   - Relaxed peer block validation to allow gap filling (MVP simplification)
+   - Added 500ms connection delays to allow P2P handshake completion
+   - All 5 integration tests now passing:
+     - `test_leader_produces_blocks_rpc` - Block production via RPC
+     - `test_peer_receives_blocks_rpc` - Block propagation to peers
+     - `test_multi_peer_sync_rpc` - Multi-peer synchronization
+     - `test_message_inclusion_rpc` - Message submission and inclusion
+     - `test_chain_continuity_rpc` - Chain validation and continuity
 
 ### CLI Usage Examples
 

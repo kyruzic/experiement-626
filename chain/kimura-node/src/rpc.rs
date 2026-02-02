@@ -29,11 +29,12 @@ pub struct RpcServer {
 }
 
 impl RpcServer {
-    /// Start RPC server with auto-selected port
+    /// Start RPC server on specified port (0 for auto-select)
     /// Returns server handle and the actual port bound
-    pub async fn start(db: Arc<RocksDB>) -> Result<(Self, u16), NodeError> {
-        // Bind to port 0 to auto-select
-        let listener = TcpListener::bind("127.0.0.1:0")
+    pub async fn start(db: Arc<RocksDB>, port: u16) -> Result<(Self, u16), NodeError> {
+        // Bind to specified port (0 = auto-select)
+        let bind_addr = format!("127.0.0.1:{}", port);
+        let listener = TcpListener::bind(&bind_addr)
             .await
             .map_err(|e| NodeError::network_init(format!("Failed to bind RPC: {}", e)))?;
 

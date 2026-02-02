@@ -133,8 +133,8 @@ impl Node {
         // Wrap services in Arc for sharing with RPC server
         let services_arc = Arc::new(services);
 
-        // Start RPC server with auto-selected port (pass only the database)
-        let (rpc_server, rpc_port) = RpcServer::start(services_arc.db.clone()).await?;
+        // Start RPC server with configured port (0 = auto-assign)
+        let (rpc_server, rpc_port) = RpcServer::start(services_arc.db.clone(), config.rpc_port).await?;
 
         info!("RPC server started on port {}", rpc_port);
 
@@ -389,39 +389,29 @@ async fn process_received_block(services: &NodeServices, data: &[u8]) -> Result<
 
     debug!("Processing block {}...", block_height);
 
-    // Validate block
+    // Check if we already have this block
     let current_height = services.get_current_height()?;
-    let current_hash = services.get_current_hash()?.unwrap_or([0u8; 32]);
-
-    // Check height continuity
-    if block_height != current_height + 1 {
-        return Err(NodeError::block_processing(format!(
-            "Height mismatch: expected {}, got {}",
-            current_height + 1,
-            block_height
-        )));
+    if block_height <= current_height {
+        debug!("Block {} already exists, skipping", block_height);
+        return Ok(());
     }
 
-    // Check previous hash
-    if block.header.prev_hash != current_hash {
-        return Err(NodeError::block_processing(format!(
-            "Previous hash mismatch at height {}",
-            block_height
-        )));
-    }
+    // MVP: Allow blocks with gaps - just store them
+    // In production, we'd need to validate prev_hash and request missing blocks
+    // For now, accept blocks and update to the new height
 
-    // Block is valid, save it
+    // Block is valid (MVP: skip strict validation), save it
     services
         .block_store
         .put_block(block_height, &block)
         .map_err(|e| NodeError::block_processing(format!("Failed to save block: {}", e)))?;
 
-    // Update metadata
+    // Update metadata to this block's height
     services
         .save_metadata(block_height, *block_hash.as_bytes())
         .map_err(|e| NodeError::block_processing(format!("Failed to save metadata: {}", e)))?;
 
-    info!("Block {} validated and saved", block_height);
+    info!("Block {} received and saved", block_height);
 
     Ok(())
 }

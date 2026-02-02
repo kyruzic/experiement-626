@@ -31,6 +31,10 @@ pub struct NodeConfig {
     /// Log level
     #[arg(long, default_value = "info")]
     pub log_level: String,
+
+    /// RPC server port (0 = auto-assign)
+    #[arg(long, default_value = "0")]
+    pub rpc_port: u16,
 }
 
 impl NodeConfig {
@@ -43,6 +47,7 @@ impl NodeConfig {
             leader_addr: None,
             block_interval_secs: 5,
             log_level: "info".to_string(),
+            rpc_port: 0,
         }
     }
 
@@ -59,6 +64,7 @@ impl NodeConfig {
             leader_addr: Some(leader_addr.into()),
             block_interval_secs: 5,
             log_level: "info".to_string(),
+            rpc_port: 0,
         }
     }
 
@@ -97,6 +103,7 @@ impl Default for NodeConfig {
             leader_addr: None,
             block_interval_secs: 5,
             log_level: "info".to_string(),
+            rpc_port: 0,
         }
     }
 }
