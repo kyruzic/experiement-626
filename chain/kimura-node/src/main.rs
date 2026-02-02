@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "error" => tracing::Level::ERROR,
         _ => tracing::Level::INFO,
     };
-    
+
     tracing_subscriber::fmt()
         .with_max_level(log_level)
         .with_target(true)
@@ -107,7 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn run_node(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     let config = create_config(&cli);
-    
+
     info!("Starting Kimura blockchain node...");
     info!("Mode: {}", if config.is_leader { "LEADER" } else { "PEER" });
     info!("Database path: {:?}", config.db_path);
@@ -143,16 +143,16 @@ async fn submit_message(
     content: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Submitting message...");
-    
+
     let config = create_config(cli);
     let services = NodeServices::new(&config)?;
-    
+
     let message = services.submit_message(sender, content)?;
-    
+
     println!("Message submitted successfully!");
     println!("Message ID: {}", hex::encode(message.id));
     println!("Timestamp: {}", message.timestamp);
-    
+
     Ok(())
 }
 
@@ -163,7 +163,7 @@ async fn query_blockchain(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = create_config(cli);
     let services = NodeServices::new(&config)?;
-    
+
     match query_type {
         QueryType::Height => {
             let height = services.get_current_height()?;
@@ -203,7 +203,7 @@ async fn query_blockchain(
             }
         }
     }
-    
+
     Ok(())
 }
 

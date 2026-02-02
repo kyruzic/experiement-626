@@ -1,10 +1,10 @@
+pub mod election;
 pub mod engine;
 pub mod validator;
-pub mod election;
 
+pub use election::Election;
 pub use engine::ConsensusEngine;
 pub use validator::Validator;
-pub use election::Election;
 
 #[cfg(test)]
 mod tests {

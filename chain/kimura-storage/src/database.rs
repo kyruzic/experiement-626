@@ -1,4 +1,4 @@
-use rocksdb::{ColumnFamilyDescriptor, Options, DB};
+use rocksdb::{ColumnFamilyDescriptor, DB, Options};
 use std::path::Path;
 use thiserror::Error;
 

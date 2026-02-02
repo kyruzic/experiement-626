@@ -1,10 +1,9 @@
 use crate::{config::NodeConfig, error::NodeError, rpc::RpcServer, services::NodeServices};
-use std::sync::Arc;
 use futures::stream::StreamExt;
 use kimura_blockchain::{Block, BlockHeader};
 use kimura_network::NetworkEvent;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::mpsc;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
@@ -38,7 +37,9 @@ impl Node {
         info!("Creating node (leader: {})...", config.is_leader);
 
         // Validate config
-        config.validate().map_err(|e| NodeError::Config(e.to_string()))?;
+        config
+            .validate()
+            .map_err(|e| NodeError::Config(e.to_string()))?;
 
         // Initialize services
         let mut services = NodeServices::new(&config)?;
@@ -52,11 +53,13 @@ impl Node {
         // Initialize mode-specific state
         let mode = if config.is_leader {
             let last_height = services.get_current_height()?;
-            let last_hash = services
-                .get_current_hash()?
-                .unwrap_or([0u8; 32]);
+            let last_hash = services.get_current_hash()?.unwrap_or([0u8; 32]);
 
-            info!("Leader initialized at height {} with hash {:?}", last_height, &last_hash[..8]);
+            info!(
+                "Leader initialized at height {} with hash {:?}",
+                last_height,
+                &last_hash[..8]
+            );
 
             NodeMode::Leader(LeaderState {
                 last_height,
@@ -67,7 +70,10 @@ impl Node {
             NodeMode::Peer(PeerState)
         };
 
-        info!("Node created successfully with peer ID: {}", services.local_peer_id());
+        info!(
+            "Node created successfully with peer ID: {}",
+            services.local_peer_id()
+        );
 
         Ok(Self {
             config,
@@ -80,10 +86,15 @@ impl Node {
 
     /// Create a new node with RPC server enabled (for integration tests)
     pub async fn new_with_rpc(config: NodeConfig) -> Result<(Self, u16), NodeError> {
-        info!("Creating node with RPC server (leader: {})...", config.is_leader);
+        info!(
+            "Creating node with RPC server (leader: {})...",
+            config.is_leader
+        );
 
         // Validate config
-        config.validate().map_err(|e| NodeError::Config(e.to_string()))?;
+        config
+            .validate()
+            .map_err(|e| NodeError::Config(e.to_string()))?;
 
         // Initialize services
         let mut services = NodeServices::new(&config)?;
@@ -97,11 +108,13 @@ impl Node {
         // Initialize mode-specific state (before wrapping in Arc)
         let mode = if config.is_leader {
             let last_height = services.get_current_height()?;
-            let last_hash = services
-                .get_current_hash()?
-                .unwrap_or([0u8; 32]);
+            let last_hash = services.get_current_hash()?.unwrap_or([0u8; 32]);
 
-            info!("Leader initialized at height {} with hash {:?}", last_height, &last_hash[..8]);
+            info!(
+                "Leader initialized at height {} with hash {:?}",
+                last_height,
+                &last_hash[..8]
+            );
 
             NodeMode::Leader(LeaderState {
                 last_height,
@@ -112,13 +125,16 @@ impl Node {
             NodeMode::Peer(PeerState)
         };
 
-        info!("Node created successfully with peer ID: {}", services.local_peer_id());
+        info!(
+            "Node created successfully with peer ID: {}",
+            services.local_peer_id()
+        );
 
         // Wrap services in Arc for sharing with RPC server
         let services_arc = Arc::new(services);
 
-        // Start RPC server with auto-selected port
-        let (rpc_server, rpc_port) = RpcServer::start(services_arc.clone()).await?;
+        // Start RPC server with auto-selected port (pass only the database)
+        let (rpc_server, rpc_port) = RpcServer::start(services_arc.db.clone()).await?;
 
         info!("RPC server started on port {}", rpc_port);
 
@@ -142,31 +158,22 @@ impl Node {
     pub async fn run(self) -> Result<(), NodeError> {
         info!("Starting node main loop...");
 
-        let Node { config, services, mode, rpc_server, rpc_port } = self;
-
-        // Drop RPC port, keep RPC server if exists
-        let _rpc_port = rpc_port;
-
-        // Create channel for network events
-        let (network_tx, network_rx) = mpsc::channel(100);
-        
-        // Spawn network event forwarding task
-        let network_services = services.clone();
-        tokio::spawn(async move {
-            loop {
-                if let Some(event) = network_services.network.lock().await.next().await {
-                    if network_tx.send(event).await.is_err() {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
+        // Remove services from Arc for direct ownership in the event loop
+        // We need exclusive access to poll the network stream
+        let services = Arc::try_unwrap(self.services).unwrap_or_else(|_arc| {
+            // If there are other references (RPC server), we can't unwrap
+            // In that case, we'll need to work with the Arc
+            // For now, panic as this indicates a logic error
+            panic!("Cannot run node: services Arc has multiple references")
         });
 
+        let config = self.config;
+        let mode = self.mode;
+        let rpc_server = self.rpc_server;
+
         let result = match mode {
-            NodeMode::Leader(state) => run_leader(config, services, network_rx, state).await,
-            NodeMode::Peer(state) => run_peer(config, services, network_rx, state).await,
+            NodeMode::Leader(state) => run_leader(config, services, state).await,
+            NodeMode::Peer(state) => run_peer(config, services, state).await,
         };
 
         // Shut down RPC server if it exists
@@ -219,24 +226,26 @@ impl Node {
 /// Run leader mode
 async fn run_leader(
     config: NodeConfig,
-    services: Arc<NodeServices>,
-    mut network_rx: mpsc::Receiver<NetworkEvent>,
+    mut services: NodeServices,
     mut state: LeaderState,
 ) -> Result<(), NodeError> {
     info!("Running in LEADER mode");
-    info!("Block production interval: {} seconds", config.block_interval_secs);
+    info!(
+        "Block production interval: {} seconds",
+        config.block_interval_secs
+    );
 
     let mut block_timer = interval(config.block_interval());
 
     loop {
         tokio::select! {
             _ = block_timer.tick() => {
-                if let Err(e) = produce_block(&services, &mut state).await {
+                if let Err(e) = produce_block(&mut services, &mut state).await {
                     error!("Block production failed: {}", e);
                     // Continue running even if block production fails
                 }
             }
-            event = network_rx.recv() => {
+            event = services.network.next() => {
                 match event {
                     Some(NetworkEvent::PeerConnected(peer_id)) => {
                         info!("Peer connected: {}", peer_id);
@@ -261,7 +270,7 @@ async fn run_leader(
 
 /// Produce a new block (leader only)
 async fn produce_block(
-    services: &NodeServices,
+    services: &mut NodeServices,
     state: &mut LeaderState,
 ) -> Result<(), NodeError> {
     let new_height = state.last_height + 1;
@@ -309,8 +318,11 @@ async fn produce_block(
     state.last_hash = *block_hash.as_bytes();
 
     // Publish to network (non-fatal - log error but don't fail block production)
-    if let Err(e) = services.network.lock().await.publish_block(&block) {
-        warn!("Failed to publish block {}: {}. Continuing...", new_height, e);
+    if let Err(e) = services.network.publish_block(&block) {
+        warn!(
+            "Failed to publish block {}: {}. Continuing...",
+            new_height, e
+        );
     }
 
     info!(
@@ -324,8 +336,7 @@ async fn produce_block(
 /// Run peer mode
 async fn run_peer(
     config: NodeConfig,
-    services: Arc<NodeServices>,
-    mut network_rx: mpsc::Receiver<NetworkEvent>,
+    mut services: NodeServices,
     _state: PeerState,
 ) -> Result<(), NodeError> {
     info!("Running in PEER mode");
@@ -333,13 +344,16 @@ async fn run_peer(
     // Dial leader if configured
     if let Some(ref leader_addr) = config.leader_addr {
         info!("Connecting to leader at {}...", leader_addr);
-        if let Err(e) = services.network.lock().await.dial(leader_addr.clone()) {
-            warn!("Failed to dial leader: {}. Will retry via network events.", e);
+        if let Err(e) = services.network.dial(leader_addr.clone()) {
+            warn!(
+                "Failed to dial leader: {}. Will retry via network events.",
+                e
+            );
         }
     }
 
     loop {
-        match network_rx.recv().await {
+        match services.network.next().await {
             Some(NetworkEvent::BlockReceived { data, source }) => {
                 debug!("Received block data from {}", source);
                 if let Err(e) = process_received_block(&services, &data).await {
@@ -365,10 +379,7 @@ async fn run_peer(
 }
 
 /// Process a received block
-async fn process_received_block(
-    services: &NodeServices,
-    data: &[u8],
-) -> Result<(), NodeError> {
+async fn process_received_block(services: &NodeServices, data: &[u8]) -> Result<(), NodeError> {
     // Deserialize block
     let block: Block = serde_json::from_slice(data)
         .map_err(|e| NodeError::block_processing(format!("Deserialization failed: {}", e)))?;
@@ -410,10 +421,7 @@ async fn process_received_block(
         .save_metadata(block_height, *block_hash.as_bytes())
         .map_err(|e| NodeError::block_processing(format!("Failed to save metadata: {}", e)))?;
 
-    info!(
-        "Block {} validated and saved",
-        block_height
-    );
+    info!("Block {} validated and saved", block_height);
 
     Ok(())
 }

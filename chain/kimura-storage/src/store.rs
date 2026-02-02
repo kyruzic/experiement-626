@@ -1,5 +1,5 @@
-use crate::database::{DatabaseError, RocksDB, CF_BLOCKS, CF_MESSAGES, CF_METADATA};
-use serde::{de::DeserializeOwned, Serialize};
+use crate::database::{CF_BLOCKS, CF_MESSAGES, CF_METADATA, DatabaseError, RocksDB};
+use serde::{Serialize, de::DeserializeOwned};
 use std::sync::Arc;
 
 /// Prefix for block keys (single byte like Geth)

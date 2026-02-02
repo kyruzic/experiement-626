@@ -1,19 +1,19 @@
 [workspace]
 members = [
-    "kimura-node",
-    "kimura-consensus",
-    "kimura-network",
-    "kimura-storage",
-    "kimura-blockchain",
+  "kimura-node",
+  "kimura-consensus",
+  "kimura-network",
+  "kimura-storage",
+  "kimura-blockchain",
 ]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
-authors = ["Blockchain Engineer"]
-license = "MIT"
-repository = "https://github.com/ai-spam-defense/kimura-blockchain"
+edition = "2024"
+authors = ["Kyle Ruzic"]
+license = "GPLv3"
+repository = "https://github.com/kyruzic/army"
 
 [workspace.dependencies]
 tokio = { version = "1.35", features = ["full"] }
@@ -25,7 +25,15 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 
 # Blockchain specific
-libp2p = { version = "0.53", features = ["tcp", "tls", "yamux", "noise", "kad", "gossipsub", "tokio"] }
+libp2p = { version = "0.53", features = [
+  "tcp",
+  "tls",
+  "yamux",
+  "noise",
+  "kad",
+  "gossipsub",
+  "tokio",
+] }
 rocksdb = { version = "0.24" }
 sha2 = "0.10"
 blake3 = "1.5"

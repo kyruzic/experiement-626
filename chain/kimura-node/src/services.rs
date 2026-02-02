@@ -3,7 +3,6 @@ use kimura_network::{NetworkConfig as P2PNetworkConfig, P2PNetwork};
 use kimura_storage::{BlockStore, MessageStore, MetadataStore, RocksDB};
 use std::path::Path;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::{debug, info};
 
 /// Services container for all node components
@@ -16,8 +15,8 @@ pub struct NodeServices {
     pub message_store: MessageStore,
     /// Metadata storage (chain state)
     pub metadata_store: MetadataStore,
-    /// P2P network (wrapped in Mutex for shared access)
-    pub network: Mutex<P2PNetwork>,
+    /// P2P network
+    pub network: P2PNetwork,
     /// Network configuration (kept for reference)
     pub network_config: P2PNetworkConfig,
 }
@@ -48,7 +47,7 @@ impl NodeServices {
             block_store,
             message_store,
             metadata_store,
-            network: Mutex::new(network),
+            network,
             network_config,
         })
     }
@@ -87,17 +86,14 @@ impl NodeServices {
 
     /// Get the local peer ID
     pub fn local_peer_id(&self) -> kimura_network::PeerId {
-        // Use blocking_lock for sync context
-        *self.network.blocking_lock().local_peer_id()
+        *self.network.local_peer_id()
     }
 
     /// Start listening on the configured address
     pub fn start_listening(&mut self, listen_addr: &str) -> Result<(), NodeError> {
         info!("Starting network listener on {}", listen_addr);
 
-        // Use blocking_lock for sync context
         self.network
-            .blocking_lock()
             .start(listen_addr)
             .map_err(|e| NodeError::network_init(format!("Failed to start listening: {}", e)))?;
 

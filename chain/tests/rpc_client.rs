@@ -33,11 +33,7 @@ impl RpcClient {
         self.get("/latest").await
     }
 
-    pub async fn submit_message(
-        &self,
-        sender: &str,
-        content: &str,
-    ) -> Result<String, String> {
+    pub async fn submit_message(&self, sender: &str, content: &str) -> Result<String, String> {
         let req = SubmitMessageRequest {
             sender: sender.to_string(),
             content: content.to_string(),
