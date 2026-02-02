@@ -1701,6 +1701,8 @@ dependencies = [
  "anyhow",
  "clap",
  "config",
+ "futures",
+ "hex",
  "kimura-blockchain",
  "kimura-consensus",
  "kimura-network",
