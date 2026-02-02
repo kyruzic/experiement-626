@@ -155,7 +155,7 @@ impl P2PNetwork {
             .with_idle_connection_timeout(Duration::from_secs(60));
         
         // Build the swarm directly
-        let swarm = Swarm::new(transport, gossipsub, local_peer_id.clone(), swarm_config);
+        let swarm = Swarm::new(transport, gossipsub, local_peer_id, swarm_config);
         
         // Create the blocks topic
         let topic = IdentTopic::new(BLOCKS_TOPIC);

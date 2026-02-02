@@ -133,7 +133,7 @@ async fn run_leader(
                     Some(NetworkEvent::PeerDisconnected(peer_id)) => {
                         warn!("Peer disconnected: {}", peer_id);
                     }
-                    Some(NetworkEvent::BlockReceived { data, source }) => {
+                    Some(NetworkEvent::BlockReceived { data: _, source }) => {
                         warn!("Leader received block from {}, ignoring", source);
                         // Leaders don't process incoming blocks
                     }
@@ -217,7 +217,7 @@ async fn produce_block(
 async fn run_peer(
     config: NodeConfig,
     mut services: NodeServices,
-    mut state: PeerState,
+    _state: PeerState,
 ) -> Result<(), NodeError> {
     info!("Running in PEER mode");
 

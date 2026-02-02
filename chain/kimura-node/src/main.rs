@@ -150,7 +150,7 @@ async fn submit_message(
     let message = services.submit_message(sender, content)?;
     
     println!("Message submitted successfully!");
-    println!("Message ID: {}", hex::encode(&message.id));
+    println!("Message ID: {}", hex::encode(message.id));
     println!("Timestamp: {}", message.timestamp);
     
     Ok(())
