@@ -1,0 +1,68 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Rust - Uncomment the following for libraries:
+# Cargo.lock generates when building a library, but should be tracked for binaries
+# See: https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html
+#Cargo.lock
+
+# Local cargo configuration
+.cargo/
+
+# Build outputs
+target/
+**/*.rs.bk
+*.rlib
+*.rmeta
+build/
+dist/
+out/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Cache
+.cache/
+*.cache

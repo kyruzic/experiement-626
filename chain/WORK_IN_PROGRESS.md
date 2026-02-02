@@ -58,21 +58,26 @@ This document tracks the implementation of Milestone 1 for the Kimura blockchain
 
 ## Phase 3: Network Layer (Days 5-7) - `kimura-network`
 
-**Status:** Not Started
+**Status:** ✅ COMPLETED
 
 **Deliverables:**
-- [ ] `P2PNetwork::new()` with libp2p transport (TCP + Noise + Yamux)
-- [ ] Gossipsub protocol configured with "blocks" topic
-- [ ] `P2PNetwork::publish_block(block)` method for serializing and publishing blocks
-- [ ] `P2PNetwork::subscribe_blocks()` returning a Stream of received blocks
-- [ ] Configuration for leader multiaddress
-- [ ] Unit tests with mock network
+- [x] `NetworkError` enum with proper error types (PublishError, SubscribeError, DialError, SerializationError)
+- [x] `NetworkConfig` struct with listen_addr and leader_addr
+- [x] Ephemeral peer identity (Ed25519 keypair generated on startup)
+- [x] `P2PNetwork::new()` with libp2p transport (TCP + Noise + Yamux)
+- [x] Gossipsub protocol configured with "kimura/blocks/1.0.0" topic
+- [x] `NetworkEvent` enum (BlockReceived, PeerConnected, PeerDisconnected)
+- [x] `P2PNetwork::subscribe_blocks()` returning Stream<NetworkEvent>
+- [x] `P2PNetwork::publish_block(block)` for JSON serialization and publishing
+- [x] `P2PNetwork::dial_leader()` for connecting to configured leader
+- [x] Unit tests for config and network creation (integration tests marked #[ignore])
 
-**Files to modify:**
-- `kimura-network/src/p2p.rs`
-- `kimura-network/src/transport.rs`
-- `kimura-network/src/protocol.rs`
-- `kimura-network/src/lib.rs`
+**Files modified:**
+- `kimura-network/src/p2p.rs` - Complete P2P implementation
+- `kimura-network/src/lib.rs` - Updated exports
+- `kimura-network/src/transport.rs` - Placeholder
+- `kimura-network/src/protocol.rs` - Placeholder
+- `Cargo.toml` - Added "tokio" feature to libp2p
 
 **Commit message:** "Add libp2p gossipsub networking"
 

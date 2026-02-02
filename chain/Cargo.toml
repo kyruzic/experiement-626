@@ -25,7 +25,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 
 # Blockchain specific
-libp2p = { version = "0.53", features = ["tcp", "tls", "yamux", "noise", "kad", "gossipsub"] }
+libp2p = { version = "0.53", features = ["tcp", "tls", "yamux", "noise", "kad", "gossipsub", "tokio"] }
 rocksdb = { version = "0.24" }
 sha2 = "0.10"
 blake3 = "1.5"
