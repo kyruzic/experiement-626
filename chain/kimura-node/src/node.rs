@@ -104,6 +104,21 @@ impl Node {
     pub fn is_leader(&self) -> bool {
         self.config.is_leader
     }
+
+    /// Get a block by height (for testing)
+    pub fn get_block(&self, height: u64) -> Result<Option<kimura_blockchain::Block>, NodeError> {
+        self.services.get_block(height)
+    }
+
+    /// Get the latest block (for testing)
+    pub fn get_latest_block(&self) -> Result<Option<kimura_blockchain::Block>, NodeError> {
+        self.services.get_latest_block()
+    }
+
+    /// Get current chain hash (for testing)
+    pub fn get_current_hash(&self) -> Result<Option<[u8; 32]>, NodeError> {
+        self.services.get_current_hash()
+    }
 }
 
 /// Run leader mode
@@ -138,8 +153,9 @@ async fn run_leader(
                         // Leaders don't process incoming blocks
                     }
                     None => {
-                        info!("Network stream closed, shutting down");
-                        break;
+                        // Network stream closed - log error but don't stop block production
+                        error!("Network stream closed unexpectedly");
+                        // Don't break - continue producing blocks
                     }
                 }
             }
@@ -195,18 +211,17 @@ async fn produce_block(
     // Clear pending messages
     services.clear_pending_messages()?;
 
-    // Publish to network
-    services
-        .network
-        .publish_block(&block)
-        .map_err(|e| NodeError::block_production(format!("Failed to publish block: {}", e)))?;
-
-    // Update leader state
+    // Update leader state BEFORE publishing (so state advances even if publish fails)
     state.last_height = new_height;
     state.last_hash = *block_hash.as_bytes();
 
+    // Publish to network (non-fatal - log error but don't fail block production)
+    if let Err(e) = services.network.publish_block(&block) {
+        warn!("Failed to publish block {}: {}. Continuing...", new_height, e);
+    }
+
     info!(
-        "Block {} produced and published with {} messages",
+        "Block {} produced with {} messages",
         new_height, message_count
     );
 

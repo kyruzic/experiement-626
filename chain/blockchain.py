@@ -166,9 +166,9 @@ def handle_test(args):
     if args.suite == 'unit':
         cmd = ['cargo', 'test', '--lib']
     elif args.suite == 'integration':
-        cmd = ['cargo', 'test', '--test', 'service']
+        cmd = ['cargo', 'test', '-p', 'kimura-node', '--test', 'integration_tests']
     else:  # all
-        cmd = ['cargo', 'test', '--all']
+        cmd = ['cargo', 'test', '--workspace']
     
     if args.coverage:
         print("Coverage: requires cargo-tarpaulin (not installed by default)")

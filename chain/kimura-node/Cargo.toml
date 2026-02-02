@@ -35,3 +35,7 @@ path = "src/main.rs"
 [lib]
 name = "kimura_node"
 path = "src/lib.rs"
+
+[[test]]
+name = "integration_tests"
+path = "../tests/integration_tests.rs"

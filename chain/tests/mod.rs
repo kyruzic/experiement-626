@@ -1,3 +1,3 @@
 // Main test entry point
 
-mod service;
+pub mod service;

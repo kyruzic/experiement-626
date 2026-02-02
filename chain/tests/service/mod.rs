@@ -1,3 +1,3 @@
 // Service test suite runner
 
-mod integration;
+pub mod integration;
