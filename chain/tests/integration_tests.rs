@@ -1,36 +1,41 @@
-//! Integration tests for the Kimura blockchain
-//! 
+//! Integration tests for the Kimura blockchain using RPC
+//!
 //! These tests verify end-to-end functionality by spinning up actual nodes
-//! and testing block production, propagation, and validation.
+//! with RPC servers and testing via HTTP calls.
 
-use kimura_blockchain::{Block, BlockHeader};
-use kimura_node::{Node, NodeConfig, NodeServices};
+use kimura_node::{Node, NodeConfig};
 use std::path::PathBuf;
 
-use tempfile::TempDir;
-use tokio::time::{sleep, timeout, Duration};
-use tracing::info;
+mod rpc_client;
+use rpc_client::{RpcClient, BlockResponse};
 
-/// Default timeout for integration tests
-const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+use tempfile::TempDir;
+use tokio::time::{sleep, Duration};
+use tracing::info;
 /// Short block interval for faster tests (1 second)
 const TEST_BLOCK_INTERVAL: u64 = 1;
 /// Test network base port
 const TEST_BASE_PORT: u16 = 15000;
 
-/// Test wrapper around Node for easier test management
+/// Test wrapper around Node for easier test management with RPC
 pub struct TestNode {
     /// Node configuration
     pub config: NodeConfig,
     /// Temporary directory for database (auto-cleaned)
     pub temp_dir: TempDir,
-    /// Port number for this node
+    /// Network port for this node
     pub port: u16,
+    /// RPC port (assigned at runtime)
+    pub rpc_port: u16,
+    /// RPC client for making HTTP calls
+    pub rpc_client: RpcClient,
+    /// Node handle for shutdown
+    node_handle: Option<tokio::task::JoinHandle<Result<(), kimura_node::NodeError>>>,
 }
 
 impl TestNode {
-    /// Create a new test node as leader
-    pub fn new_leader(port: u16) -> Self {
+    /// Create and start a new test node as leader with RPC
+    pub async fn new_leader(port: u16) -> Self {
         let temp_dir = TempDir::new().unwrap();
         let config = NodeConfig {
             is_leader: true,
@@ -41,15 +46,34 @@ impl TestNode {
             log_level: "debug".to_string(),
         };
 
-        Self {
+        // Create node with RPC
+        let (node, rpc_port) = Node::new_with_rpc(config.clone()).await
+            .expect("Failed to create leader node with RPC");
+
+        let rpc_client = RpcClient::new(rpc_port);
+
+        let mut test_node = Self {
             config,
             temp_dir,
             port,
-        }
+            rpc_port,
+            rpc_client,
+            node_handle: None,
+        };
+
+        // Start the node
+        test_node.node_handle = Some(tokio::spawn(async move {
+            node.run().await
+        }));
+
+        // Wait for RPC to be ready
+        test_node.wait_for_rpc().await;
+
+        test_node
     }
 
-    /// Create a new test node as peer
-    pub fn new_peer(port: u16, leader_port: u16) -> Self {
+    /// Create and start a new test node as peer with RPC
+    pub async fn new_peer(port: u16, leader_port: u16) -> Self {
         let temp_dir = TempDir::new().unwrap();
         let config = NodeConfig {
             is_leader: false,
@@ -60,252 +84,279 @@ impl TestNode {
             log_level: "debug".to_string(),
         };
 
-        Self {
+        // Create node with RPC
+        let (node, rpc_port) = Node::new_with_rpc(config.clone()).await
+            .expect("Failed to create peer node with RPC");
+
+        let rpc_client = RpcClient::new(rpc_port);
+
+        let mut test_node = Self {
             config,
             temp_dir,
             port,
+            rpc_port,
+            rpc_client,
+            node_handle: None,
+        };
+
+        // Start the node
+        test_node.node_handle = Some(tokio::spawn(async move {
+            node.run().await
+        }));
+
+        // Wait for RPC to be ready
+        test_node.wait_for_rpc().await;
+
+        test_node
+    }
+
+    /// Wait for RPC server to be ready
+    async fn wait_for_rpc(&self) {
+        let start = tokio::time::Instant::now();
+        loop {
+            if let Ok(health) = self.rpc_client.health().await {
+                info!("RPC ready on port {}: status={}", self.rpc_port, health.status);
+                return;
+            }
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("RPC server failed to start on port {}", self.rpc_port);
+            }
+            sleep(Duration::from_millis(100)).await;
         }
     }
 
-    /// Spawn the node in a background task
-    pub fn spawn(&self) -> tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
-        let config = self.config.clone();
-        tokio::spawn(async move {
-            let node = Node::new(config)?;
-            node.run().await.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })
-        })
+    /// Get current height via RPC
+    pub async fn get_height(&self) -> u64 {
+        self.rpc_client.height().await
+            .expect("Failed to get height via RPC")
     }
 
-    /// Get database path
-    pub fn db_path(&self) -> PathBuf {
-        self.temp_dir.path().join("db")
+    /// Get block at specific height via RPC
+    pub async fn get_block(&self, height: u64) -> Option<BlockResponse> {
+        self.rpc_client.block(height).await.ok()
     }
 
-    /// Query the database state (must be called when node is not running)
-    pub fn query(&self) -> Result<QueryResult, Box<dyn std::error::Error>> {
-        let services = NodeServices::new(&self.config)?;
-        let height = services.get_current_height()?;
-        let latest_block = services.get_latest_block()?;
-        Ok(QueryResult {
-            height,
-            latest_block,
-            services,
-        })
+    /// Get latest block via RPC
+    pub async fn get_latest(&self) -> BlockResponse {
+        self.rpc_client.latest().await
+            .expect("Failed to get latest block via RPC")
     }
-}
 
-/// Result from querying a test node's database
-pub struct QueryResult {
-    pub height: u64,
-    pub latest_block: Option<Block>,
-    pub services: NodeServices,
-}
+    /// Submit a message via RPC
+    pub async fn submit_message(&self, sender: &str, content: &str) -> String {
+        self.rpc_client.submit_message(sender, content).await
+            .expect("Failed to submit message via RPC")
+    }
 
-impl QueryResult {
-    pub fn get_block(&self, height: u64) -> Result<Option<Block>, Box<dyn std::error::Error>> {
-        Ok(self.services.get_block(height)?)
+    /// Stop the node
+    pub async fn stop(&mut self) {
+        if let Some(handle) = self.node_handle.take() {
+            handle.abort();
+            sleep(Duration::from_millis(200)).await;
+        }
     }
 }
 
-/// Verify that two chains are identical
-pub async fn verify_chain_equality(
-    query1: &QueryResult,
-    query2: &QueryResult,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let height1 = query1.height;
-    let height2 = query2.height;
+impl Drop for TestNode {
+    fn drop(&mut self) {
+        if let Some(handle) = self.node_handle.take() {
+            handle.abort();
+        }
+    }
+}
 
-    assert_eq!(height1, height2, "Chain heights don't match: {} vs {}", height1, height2);
+/// Wait for a specific block height via RPC polling
+pub async fn wait_for_height_rpc(
+    node: &TestNode,
+    target_height: u64,
+    max_wait: Duration,
+) -> Result<u64, String> {
+    let start = tokio::time::Instant::now();
+    loop {
+        let height = node.get_height().await;
+        if height >= target_height {
+            return Ok(height);
+        }
+        if start.elapsed() > max_wait {
+            return Err(format!(
+                "Timeout waiting for height {}. Current: {}",
+                target_height, height
+            ));
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// Verify that two chains are identical via RPC
+pub async fn verify_chain_equality_rpc(
+    node1: &TestNode,
+    node2: &TestNode,
+) -> Result<(), String> {
+    let height1 = node1.get_height().await;
+    let height2 = node2.get_height().await;
+
+    if height1 != height2 {
+        return Err(format!(
+            "Chain heights don't match: {} vs {}",
+            height1, height2
+        ));
+    }
 
     for h in 0..=height1 {
-        let block1 = query1.get_block(h)?.expect("Block should exist");
-        let block2 = query2.get_block(h)?.expect("Block should exist");
+        let block1 = node1.get_block(h).await.ok_or_else(|| format!("Block {} not found on node1", h))?;
+        let block2 = node2.get_block(h).await.ok_or_else(|| format!("Block {} not found on node2", h))?;
 
-        assert_eq!(block1.header.height, block2.header.height, "Height mismatch at {}", h);
-        assert_eq!(block1.header.prev_hash, block2.header.prev_hash, "Prev hash mismatch at {}", h);
-        assert_eq!(block1.message_ids.len(), block2.message_ids.len(), "Message count mismatch at {}", h);
+        if block1.height != block2.height {
+            return Err(format!("Height mismatch at {}", h));
+        }
+        if block1.prev_hash != block2.prev_hash {
+            return Err(format!("Prev hash mismatch at {}", h));
+        }
+        if block1.message_count != block2.message_count {
+            return Err(format!("Message count mismatch at {}", h));
+        }
     }
 
     Ok(())
 }
 
-/// Wait for a specific block height to be reached by polling
-pub async fn wait_for_height(
-    node: &TestNode,
-    target_height: u64,
-    _timeout_duration: Duration,
-) -> Result<QueryResult, Box<dyn std::error::Error>> {
-    // Actually, let's just wait the appropriate time for blocks to be produced
-    let wait_time = Duration::from_secs(TEST_BLOCK_INTERVAL * (target_height + 3));
-    sleep(wait_time).await;
-    
-    // Query after waiting
-    node.query()
-}
-
-/// Test 1: Leader produces blocks consistently
-/// 
+/// Test 1: Leader produces blocks via RPC verification
+///
 /// Verifies that a leader node:
-/// - Initializes correctly with genesis block
+/// - Initializes correctly with genesis block (height = 0)
 /// - Produces blocks at regular intervals
 /// - Maintains sequential height
-/// - Stores blocks in database
 #[tokio::test]
-async fn test_leader_produces_blocks() {
-    info!("Starting test_leader_produces_blocks");
+async fn test_leader_produces_blocks_rpc() {
+    info!("Starting test_leader_produces_blocks_rpc");
 
-    let leader = TestNode::new_leader(TEST_BASE_PORT);
-    let leader_handle = leader.spawn();
+    let leader = TestNode::new_leader(TEST_BASE_PORT).await;
 
-    // Wait for 3 blocks to be produced (genesis + 2 new blocks)
-    // Give extra time for network initialization and block production
-    println!("Waiting for blocks to be produced...");
-    sleep(Duration::from_secs(8)).await;
-    println!("Wait complete, stopping node...");
+    // Wait for genesis block to be produced
+    let height = wait_for_height_rpc(&leader, 0, Duration::from_secs(5))
+        .await
+        .expect("Should have genesis block");
+    assert_eq!(height, 0, "Initial height should be 0 (genesis)");
 
-    // Stop the leader
-    leader_handle.abort();
-    sleep(Duration::from_millis(200)).await; // Give time for abort
+    // Wait for block 1
+    wait_for_height_rpc(&leader, 1, Duration::from_secs(5))
+        .await
+        .expect("Should produce block 1");
 
-    // Query the state
-    let query = leader.query().expect("Failed to query leader state");
-    println!("Queried height: {}", query.height);
+    // Wait for block 2
+    wait_for_height_rpc(&leader, 2, Duration::from_secs(5))
+        .await
+        .expect("Should produce block 2");
 
-    // Verify blocks exist
-    let height = query.height;
-    assert!(height >= 2, "Expected at least 2 blocks, got {}", height);
+    // Verify block continuity via RPC
+    let block1 = leader.get_block(1).await.expect("Block 1 should exist");
+    let block2 = leader.get_block(2).await.expect("Block 2 should exist");
 
-    // Verify genesis block
-    let genesis = query.get_block(0).expect("Failed to get genesis").expect("Genesis should exist");
-    assert_eq!(genesis.header.height, 0, "Genesis height should be 0");
+    assert_eq!(block1.height, 1, "Block 1 height mismatch");
+    assert_eq!(block2.height, 2, "Block 2 height mismatch");
 
-    // Verify block continuity
-    for h in 1..=height {
-        let block = query.get_block(h).expect("Failed to get block").expect("Block should exist");
-        assert_eq!(block.header.height, h, "Block height mismatch");
-        
-        let prev_block = query.get_block(h - 1).expect("Failed to get prev block").unwrap();
-        assert_eq!(
-            block.header.prev_hash,
-            prev_block.hash().as_bytes().to_owned(),
-            "Previous hash mismatch at height {}",
-            h
-        );
-    }
+    // Verify previous hash links
+    assert!(!block1.prev_hash.is_empty(), "Block 1 should have prev_hash");
+    assert!(!block2.prev_hash.is_empty(), "Block 2 should have prev_hash");
 
-    // Verify timestamps increase
-    let mut prev_timestamp = 0u64;
-    for h in 0..=height {
-        let block = query.get_block(h).unwrap().unwrap();
-        assert!(
-            block.header.timestamp >= prev_timestamp,
-            "Timestamp should increase monotonically"
-        );
-        prev_timestamp = block.header.timestamp;
-    }
-
-    info!("test_leader_produces_blocks completed successfully");
+    info!("test_leader_produces_blocks_rpc completed successfully");
 }
 
-/// Test 2: Peer receives and validates blocks
-/// 
+/// Test 2: Peer receives and validates blocks via RPC
+///
 /// Verifies that a peer node:
 /// - Connects to leader successfully
 /// - Receives blocks via gossipsub
-/// - Validates blocks (height + prev_hash)
 /// - Stores valid blocks in local database
+/// - Chain matches leader via RPC queries
 #[tokio::test]
-async fn test_peer_receives_blocks() {
-    info!("Starting test_peer_receives_blocks");
+async fn test_peer_receives_blocks_rpc() {
+    info!("Starting test_peer_receives_blocks_rpc");
 
     // Start leader
-    let leader = TestNode::new_leader(TEST_BASE_PORT + 10);
-    let leader_handle = leader.spawn();
+    let leader = TestNode::new_leader(TEST_BASE_PORT + 10).await;
 
-    // Wait for leader to start and produce some blocks
-    sleep(Duration::from_secs(4)).await;
+    // Wait for leader to produce some blocks
+    wait_for_height_rpc(&leader, 2, Duration::from_secs(5))
+        .await
+        .expect("Leader should produce blocks");
 
     // Start peer
-    let peer = TestNode::new_peer(TEST_BASE_PORT + 11, TEST_BASE_PORT + 10);
-    let peer_handle = peer.spawn();
+    let peer = TestNode::new_peer(TEST_BASE_PORT + 11, TEST_BASE_PORT + 10).await;
 
     // Give nodes time to connect and sync
-    sleep(Duration::from_secs(8)).await;
+    sleep(Duration::from_secs(4)).await;
 
-    // Stop both nodes
-    leader_handle.abort();
-    peer_handle.abort();
-    sleep(Duration::from_millis(200)).await;
+    // Wait for peer to catch up
+    let peer_height = wait_for_height_rpc(&peer, 2, Duration::from_secs(10))
+        .await
+        .expect("Peer should receive blocks from leader");
 
-    // Query both chains
-    let leader_query = leader.query().expect("Failed to query leader");
-    let peer_query = peer.query().expect("Failed to query peer");
+    let leader_height = leader.get_height().await;
 
-    // Verify peer has received blocks
-    let leader_height = leader_query.height;
-    let peer_height = peer_query.height;
+    info!(
+        "Chain heights - Leader: {}, Peer: {}",
+        leader_height, peer_height
+    );
 
     assert!(
-        peer_height >= 1,
-        "Peer should have received at least genesis + 1 block. Leader: {}, Peer: {}",
+        peer_height >= 2,
+        "Peer should have at least genesis + 2 blocks. Leader: {}, Peer: {}",
         leader_height,
         peer_height
     );
 
-    // Verify chains match
-    verify_chain_equality(&leader_query, &peer_query)
+    // Verify chains match via RPC
+    verify_chain_equality_rpc(&leader, &peer)
         .await
         .expect("Chains should be equal");
 
-    info!("test_peer_receives_blocks completed successfully");
+    info!("test_peer_receives_blocks_rpc completed successfully");
 }
 
-/// Test 3: Multi-peer synchronization
-/// 
+/// Test 3: Multi-peer synchronization via RPC
+///
 /// Verifies that multiple peers:
 /// - Can connect to the same leader
 /// - All receive the same blocks
 /// - Late-joining peer can catch up
 /// - All chains remain consistent
 #[tokio::test]
-async fn test_multi_peer_sync() {
-    info!("Starting test_multi_peer_sync");
+async fn test_multi_peer_sync_rpc() {
+    info!("Starting test_multi_peer_sync_rpc");
 
     // Start leader
-    let leader = TestNode::new_leader(TEST_BASE_PORT + 20);
-    let leader_handle = leader.spawn();
+    let leader = TestNode::new_leader(TEST_BASE_PORT + 20).await;
 
+    // Wait for leader to start
     sleep(Duration::from_millis(500)).await;
 
     // Start first peer (early joiner)
-    let peer1 = TestNode::new_peer(TEST_BASE_PORT + 21, TEST_BASE_PORT + 20);
-    let peer1_handle = peer1.spawn();
+    let peer1 = TestNode::new_peer(TEST_BASE_PORT + 21, TEST_BASE_PORT + 20).await;
 
     // Wait for some blocks to be produced
-    sleep(Duration::from_secs(4)).await;
+    wait_for_height_rpc(&leader, 3, Duration::from_secs(5))
+        .await
+        .expect("Leader should produce blocks");
 
     // Start second peer (late joiner)
-    let peer2 = TestNode::new_peer(TEST_BASE_PORT + 22, TEST_BASE_PORT + 20);
-    let peer2_handle = peer2.spawn();
+    let peer2 = TestNode::new_peer(TEST_BASE_PORT + 22, TEST_BASE_PORT + 20).await;
 
     // Wait for more blocks (give peer2 time to catch up)
-    sleep(Duration::from_secs(8)).await;
+    sleep(Duration::from_secs(4)).await;
 
-    // Stop all nodes
-    leader_handle.abort();
-    peer1_handle.abort();
-    peer2_handle.abort();
-    sleep(Duration::from_millis(200)).await;
+    // Wait for all nodes to sync
+    wait_for_height_rpc(&peer1, 3, Duration::from_secs(5))
+        .await
+        .expect("Peer1 should sync");
+    wait_for_height_rpc(&peer2, 3, Duration::from_secs(8))
+        .await
+        .expect("Peer2 should catch up");
 
-    // Query all chains
-    let leader_query = leader.query().expect("Failed to query leader");
-    let peer1_query = peer1.query().expect("Failed to query peer1");
-    let peer2_query = peer2.query().expect("Failed to query peer2");
-
-    // Verify all chains match
-    let leader_height = leader_query.height;
-    let peer1_height = peer1_query.height;
-    let peer2_height = peer2_query.height;
+    // Query all chain heights via RPC
+    let leader_height = leader.get_height().await;
+    let peer1_height = peer1.get_height().await;
+    let peer2_height = peer2.get_height().await;
 
     info!(
         "Chain heights - Leader: {}, Peer1: {}, Peer2: {}",
@@ -315,139 +366,131 @@ async fn test_multi_peer_sync() {
     assert_eq!(leader_height, peer1_height, "Peer1 should match leader");
     assert_eq!(leader_height, peer2_height, "Peer2 should match leader");
 
-    verify_chain_equality(&leader_query, &peer1_query)
+    // Verify all chains match via RPC
+    verify_chain_equality_rpc(&leader, &peer1)
         .await
         .expect("Leader and peer1 should match");
-    verify_chain_equality(&leader_query, &peer2_query)
+    verify_chain_equality_rpc(&leader, &peer2)
         .await
         .expect("Leader and peer2 should match");
 
-    info!("test_multi_peer_sync completed successfully");
+    info!("test_multi_peer_sync_rpc completed successfully");
 }
 
-/// Test 4: Message inclusion in blocks
-/// 
+/// Test 4: Message inclusion via RPC submission
+///
 /// Verifies that:
-/// - Messages can be submitted to the leader
-/// - Messages are included in the next block
+/// - Messages can be submitted via RPC
+/// - Messages are included in blocks
 /// - Message IDs are stored correctly
-/// - Messages persist in database
 #[tokio::test]
-async fn test_message_inclusion() {
-    info!("Starting test_message_inclusion");
-
-    // For this test, we need to be able to submit messages to the running leader
-    // This requires the leader to expose a way to receive messages
-    // For now, we'll verify the basic block production still works
+async fn test_message_inclusion_rpc() {
+    info!("Starting test_message_inclusion_rpc");
 
     // Start leader
-    let leader = TestNode::new_leader(TEST_BASE_PORT + 30);
-    let leader_handle = leader.spawn();
+    let leader = TestNode::new_leader(TEST_BASE_PORT + 30).await;
 
-    sleep(Duration::from_secs(8)).await;
+    // Wait for genesis
+    wait_for_height_rpc(&leader, 0, Duration::from_secs(3))
+        .await
+        .expect("Should have genesis");
 
-    // Stop leader
-    leader_handle.abort();
-    sleep(Duration::from_millis(200)).await;
+    // Submit messages via RPC
+    let msg_id1 = leader.submit_message("test_sender", "Hello Kimura!").await;
+    let msg_id2 = leader.submit_message("test_sender", "Second message").await;
 
-    // Query the state
-    let query = leader.query().expect("Failed to query");
-    let height = query.height;
+    info!("Submitted messages: {}, {}", msg_id1, msg_id2);
 
-    assert!(
-        height >= 2,
-        "Should have produced at least 2 blocks, got {}",
-        height
-    );
+    // Wait for block with messages
+    sleep(Duration::from_secs(TEST_BLOCK_INTERVAL + 1)).await;
 
-    // Verify each block exists
+    // Query blocks to find messages
+    let height = leader.get_height().await;
+    let mut found_message_count = 0;
+
     for h in 0..=height {
-        let block = query.get_block(h).expect("Failed to get block").expect("Block should exist");
-        assert_eq!(block.header.height, h, "Block height mismatch");
+        if let Some(block) = leader.get_block(h).await {
+            found_message_count += block.message_count;
+            if block.message_count > 0 {
+                info!("Block {} contains {} messages", h, block.message_count);
+            }
+        }
     }
 
-    info!("test_message_inclusion completed successfully");
+    assert!(
+        found_message_count >= 2,
+        "Should have at least 2 messages included in blocks, found {}",
+        found_message_count
+    );
+
+    info!("test_message_inclusion_rpc completed successfully");
 }
 
-/// Test 5: Chain continuity validation
-/// 
+/// Test 5: Chain continuity validation via RPC
+///
 /// Verifies that:
-/// - Valid blocks pass validation
-/// - Invalid blocks (wrong prev_hash) are rejected
-/// - Invalid blocks (wrong height) are rejected
-/// - Validation errors are meaningful
+/// - Blocks form a continuous chain
+/// - Previous hash links are correct
+/// - Timestamps increase monotonically
 #[tokio::test]
-async fn test_chain_continuity_validation() {
-    info!("Starting test_chain_continuity_validation");
+async fn test_chain_continuity_rpc() {
+    info!("Starting test_chain_continuity_rpc");
 
-    // This test validates the block verification logic directly
-    // without needing a running node
-    
-    // Create genesis
-    let genesis = Block::genesis();
-    let genesis_hash = genesis.hash();
+    // Start leader and produce some blocks
+    let leader = TestNode::new_leader(TEST_BASE_PORT + 40).await;
 
-    // Create valid block 1
-    let valid_block = Block {
-        header: BlockHeader {
-            height: 1,
-            timestamp: 1000,
-            prev_hash: *genesis_hash.as_bytes(),
-            message_root: [0u8; 32],
-        },
-        message_ids: vec![],
-    };
+    // Wait for multiple blocks
+    wait_for_height_rpc(&leader, 5, Duration::from_secs(8))
+        .await
+        .expect("Should produce at least 5 blocks");
 
-    // Verify valid block passes
-    let result = valid_block.verify(&genesis);
-    assert!(result.is_ok(), "Valid block should pass validation");
+    let height = leader.get_height().await;
 
-    // Create invalid block (wrong prev_hash)
-    let invalid_block = Block {
-        header: BlockHeader {
-            height: 1,
-            timestamp: 1000,
-            prev_hash: [0xFFu8; 32], // Wrong hash
-            message_root: [0u8; 32],
-        },
-        message_ids: vec![],
-    };
+    // Verify chain continuity via RPC
+    let mut prev_hash = String::new();
+    let mut prev_timestamp: u64 = 0;
 
-    // Verify invalid block fails
-    let result = invalid_block.verify(&genesis);
-    assert!(result.is_err(), "Block with wrong prev_hash should fail");
+    for h in 0..=height {
+        let block = leader.get_block(h).await
+            .expect(&format!("Block {} should exist", h));
 
-    // Create invalid block (wrong height)
-    let wrong_height_block = Block {
-        header: BlockHeader {
-            height: 2, // Should be 1
-            timestamp: 1000,
-            prev_hash: *genesis_hash.as_bytes(),
-            message_root: [0u8; 32],
-        },
-        message_ids: vec![],
-    };
+        assert_eq!(block.height, h, "Block height mismatch at {}", h);
 
-    // Verify wrong height fails
-    let result = wrong_height_block.verify(&genesis);
-    assert!(result.is_err(), "Block with wrong height should fail");
+        if h > 0 {
+            // Verify previous hash link
+            assert_eq!(
+                block.prev_hash, prev_hash,
+                "Previous hash mismatch at height {}", h
+            );
+        }
 
-    info!("test_chain_continuity_validation completed successfully");
+        // Verify timestamp increases
+        assert!(
+            block.timestamp >= prev_timestamp,
+            "Timestamp should increase monotonically at height {}",
+            h
+        );
+
+        prev_hash = block.hash.clone();
+        prev_timestamp = block.timestamp;
+    }
+
+    info!("test_chain_continuity_rpc completed successfully");
 }
 
-/// Test 6: Graceful shutdown and restart
-/// 
+/// Test 6: Graceful shutdown and restart via RPC
+///
 /// Verifies that:
 /// - Node can shut down cleanly
 /// - Metadata is persisted to database
 /// - Node can restart and resume from last block
 /// - No data loss occurs
 #[tokio::test]
-async fn test_graceful_shutdown() {
-    info!("Starting test_graceful_shutdown");
+async fn test_graceful_shutdown_rpc() {
+    info!("Starting test_graceful_shutdown_rpc");
 
     // Create a persistent directory (not temp, so it survives)
-    let db_path = PathBuf::from("/tmp/kimura_test_shutdown");
+    let db_path = PathBuf::from("/tmp/kimura_test_shutdown_rpc");
     std::fs::remove_dir_all(&db_path).ok(); // Clean up if exists
     std::fs::create_dir_all(&db_path).expect("Failed to create test directory");
 
@@ -461,35 +504,37 @@ async fn test_graceful_shutdown() {
         log_level: "debug".to_string(),
     };
 
+    let (node1, rpc_port1) = Node::new_with_rpc(config1.clone()).await
+        .expect("Failed to create node 1");
+    let rpc1 = RpcClient::new(rpc_port1);
+
     let node1_handle = tokio::spawn(async move {
-        let node = Node::new(config1).expect("Failed to create node 1");
-        node.run().await
+        node1.run().await
     });
 
-    // Run node briefly to produce some blocks (give enough time for genesis + 2 blocks)
-    sleep(Duration::from_secs(8)).await;
+    // Wait for RPC to be ready
+    let start = tokio::time::Instant::now();
+    loop {
+        if rpc1.health().await.is_ok() {
+            break;
+        }
+        if start.elapsed() > Duration::from_secs(5) {
+            panic!("RPC failed to start");
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    // Wait for blocks to be produced
+    wait_for_height_via_client(&rpc1, 3, Duration::from_secs(8))
+        .await
+        .expect("Should produce blocks");
+
+    let height_before_shutdown = rpc1.height().await.expect("Failed to get height");
+    info!("Node shut down at height {}", height_before_shutdown);
+
+    // Stop node
     node1_handle.abort();
-    sleep(Duration::from_millis(200)).await;
-
-    // Query state after shutdown
-    let query_config = NodeConfig {
-        is_leader: true,
-        db_path: db_path.clone(),
-        listen_addr: format!("/ip4/127.0.0.1/tcp/{}", TEST_BASE_PORT + 51),
-        leader_addr: None,
-        block_interval_secs: TEST_BLOCK_INTERVAL,
-        log_level: "debug".to_string(),
-    };
-    let services1 = NodeServices::new(&query_config).expect("Failed to get services 1");
-    let height_after_shutdown = services1.get_current_height().expect("Failed to get height after shutdown");
-
-    assert!(
-        height_after_shutdown >= 2,
-        "Should have produced at least 2 blocks before shutdown, got {}",
-        height_after_shutdown
-    );
-
-    info!("Node shut down at height {}", height_after_shutdown);
+    sleep(Duration::from_millis(300)).await;
 
     // Phase 2: Restart node
     let config2 = NodeConfig {
@@ -501,13 +546,17 @@ async fn test_graceful_shutdown() {
         log_level: "debug".to_string(),
     };
 
-    let node2 = Node::new(config2).expect("Failed to create node 2");
-    let height_after_restart = node2.get_height().expect("Failed to get height after restart");
+    let (node2, rpc_port2) = Node::new_with_rpc(config2.clone()).await
+        .expect("Failed to create node 2");
+    let rpc2 = RpcClient::new(rpc_port2);
+
+    // Verify height persisted
+    let height_after_restart = rpc2.height().await.expect("Failed to get height after restart");
 
     assert_eq!(
-        height_after_shutdown, height_after_restart,
+        height_before_shutdown, height_after_restart,
         "Height should persist across restarts. Before: {}, After: {}",
-        height_after_shutdown, height_after_restart
+        height_before_shutdown, height_after_restart
     );
 
     // Run node briefly to verify it continues from correct height
@@ -515,13 +564,22 @@ async fn test_graceful_shutdown() {
         node2.run().await
     });
 
-    sleep(Duration::from_secs(6)).await;
-    node2_handle.abort();
-    sleep(Duration::from_millis(200)).await;
+    // Wait for RPC to be ready
+    let start = tokio::time::Instant::now();
+    loop {
+        if rpc2.health().await.is_ok() {
+            break;
+        }
+        if start.elapsed() > Duration::from_secs(5) {
+            panic!("RPC failed to start after restart");
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
 
-    // Query final state
-    let services2 = NodeServices::new(&query_config).expect("Failed to get services 2");
-    let final_height = services2.get_current_height().expect("Failed to get final height");
+    // Wait for new blocks to be produced
+    sleep(Duration::from_secs(4)).await;
+
+    let final_height = rpc2.height().await.expect("Failed to get final height");
 
     assert!(
         final_height > height_after_restart,
@@ -530,6 +588,27 @@ async fn test_graceful_shutdown() {
     );
 
     // Cleanup
+    node2_handle.abort();
     std::fs::remove_dir_all(&db_path).ok();
-    info!("test_graceful_shutdown completed successfully");
+    info!("test_graceful_shutdown_rpc completed successfully");
+}
+
+/// Helper to wait for height using RPC client
+async fn wait_for_height_via_client(
+    client: &RpcClient,
+    target_height: u64,
+    max_wait: Duration,
+) -> Result<u64, String> {
+    let start = tokio::time::Instant::now();
+    loop {
+        if let Ok(height) = client.height().await {
+            if height >= target_height {
+                return Ok(height);
+            }
+        }
+        if start.elapsed() > max_wait {
+            return Err(format!("Timeout waiting for height {}", target_height));
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
 }

@@ -22,11 +22,14 @@ clap = { version = "4.4", features = ["derive"] }
 config = "0.14"
 futures = "0.3"
 hex = "0.4"
+axum = "0.7"
+reqwest = { version = "0.11", features = ["json"], optional = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
 mockall = { workspace = true }
 tempfile = { workspace = true }
+reqwest = { version = "0.11", features = ["json"] }
 
 [[bin]]
 name = "kimura-node"

@@ -43,6 +43,9 @@ pub enum NodeError {
 
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+
+    #[error("RPC server error: {0}")]
+    RpcServer(String),
 }
 
 impl NodeError {
@@ -69,6 +72,11 @@ impl NodeError {
     /// Create a block processing error
     pub fn block_processing(msg: impl Into<String>) -> Self {
         Self::BlockProcessing(msg.into())
+    }
+
+    /// Create an RPC server error
+    pub fn rpc_server(msg: impl Into<String>) -> Self {
+        Self::RpcServer(msg.into())
     }
 }
 
@@ -106,5 +114,11 @@ mod tests {
     fn test_block_processing_error() {
         let err = NodeError::block_processing("invalid hash");
         assert!(matches!(err, NodeError::BlockProcessing(_)));
+    }
+
+    #[test]
+    fn test_rpc_server_error() {
+        let err = NodeError::rpc_server("bind failed");
+        assert!(matches!(err, NodeError::RpcServer(_)));
     }
 }
