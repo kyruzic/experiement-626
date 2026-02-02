@@ -35,16 +35,16 @@ This document tracks the implementation of Milestone 1 for the Kimura blockchain
 
 ## Phase 2: Core Blockchain (Days 3-4) - `kimura-blockchain`
 
-**Status:** Not Started
+**Status:** ✅ COMPLETED
 
 **Deliverables:**
-- [ ] `BlockHeader` struct with fields: height, timestamp, prev_hash [u8; 32], message_root [u8; 32]
-- [ ] `Block` struct with header and message_ids: Vec<[u8; 32]>
-- [ ] `Message` struct with id, sender, content, timestamp, nonce
-- [ ] `Block::hash()` implementation using blake3
-- [ ] `Block::verify(prev_block)` method checking prev_hash and height continuity
-- [ ] Hardcoded genesis block (height 0, prev_hash = 0x000...)
-- [ ] Unit tests for block creation, hashing, and validation
+- [x] `BlockHeader` struct with fields: height, timestamp, prev_hash [u8; 32], message_root [u8; 32]
+- [x] `Block` struct with header and message_ids: Vec<[u8; 32]>
+- [x] `Message` struct with id, sender, content, timestamp, nonce
+- [x] `Block::hash()` implementation using blake3
+- [x] `Block::verify(prev_block)` method checking prev_hash and height continuity
+- [x] Hardcoded genesis block (height 0, prev_hash = 0x000...)
+- [x] Unit tests for block creation, hashing, and validation (15 tests passing)
 
 **Files to modify:**
 - `kimura-blockchain/src/block.rs`

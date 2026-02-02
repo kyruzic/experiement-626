@@ -20,6 +20,7 @@ sha2 = { workspace = true }
 blake3 = { workspace = true }
 secp256k1 = { workspace = true }
 chrono = "0.4"
+hex = "0.4"
 
 [dev-dependencies]
 tokio-test = { workspace = true }
