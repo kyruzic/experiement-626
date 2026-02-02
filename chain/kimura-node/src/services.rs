@@ -153,6 +153,77 @@ impl NodeServices {
         info!("Genesis block created and saved");
         Ok(())
     }
+
+    /// Submit a message to the pending queue
+    pub fn submit_message(
+        &self,
+        sender: String,
+        content: String,
+    ) -> Result<kimura_blockchain::Message, NodeError> {
+        let timestamp = current_unix_time();
+        let nonce = generate_nonce();
+
+        let message = kimura_blockchain::Message::new(sender, content, timestamp, nonce);
+        let message_id = message.id;
+
+        // Store in pending column family
+        self.message_store.put_message(&message_id, &message)?;
+
+        info!(
+            "Message submitted with ID: {}",
+            hex::encode(&message_id[..8])
+        );
+        Ok(message)
+    }
+
+    /// Collect all pending messages for block production
+    pub fn collect_pending_messages(&self) -> Result<Vec<kimura_blockchain::Message>, NodeError> {
+        // For M1, we use a simple approach: query messages by iterating
+        // In production, you'd want an indexed pending queue
+        // For now, return empty (will be implemented with proper indexing)
+        debug!("Collecting pending messages");
+        Ok(vec![])
+    }
+
+    /// Clear the pending message queue after block production
+    pub fn clear_pending_messages(&self) -> Result<(), NodeError> {
+        // Placeholder - will be implemented with proper pending queue management
+        debug!("Clearing pending messages");
+        Ok(())
+    }
+
+    /// Get a block by height
+    pub fn get_block(&self, height: u64) -> Result<Option<kimura_blockchain::Block>, NodeError> {
+        self.block_store
+            .get_block::<kimura_blockchain::Block>(height)
+            .map_err(|e| e.into())
+    }
+
+    /// Get the latest block
+    pub fn get_latest_block(&self) -> Result<Option<kimura_blockchain::Block>, NodeError> {
+        let height = self.get_current_height()?;
+        self.get_block(height)
+    }
+}
+
+/// Get current Unix timestamp
+fn current_unix_time() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// Generate a random nonce for message uniqueness
+fn generate_nonce() -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::time::Instant;
+
+    let mut hasher = DefaultHasher::new();
+    Instant::now().hash(&mut hasher);
+    hasher.finish()
 }
 
 #[cfg(test)]

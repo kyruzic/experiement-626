@@ -1,7 +1,7 @@
 use crate::{config::NodeConfig, error::NodeError, services::NodeServices};
 use futures::stream::StreamExt;
 use kimura_blockchain::{Block, BlockHeader};
-use kimura_network::{NetworkEvent, PeerId};
+use kimura_network::NetworkEvent;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
@@ -26,9 +26,7 @@ pub struct LeaderState {
 }
 
 /// State for peer mode
-pub struct PeerState {
-    leader_id: Option<PeerId>,
-}
+pub struct PeerState;
 
 impl Node {
     /// Create a new node
@@ -62,7 +60,7 @@ impl Node {
             })
         } else {
             info!("Peer initialized, will connect to leader");
-            NodeMode::Peer(PeerState { leader_id: None })
+            NodeMode::Peer(PeerState)
         };
 
         info!("Node created successfully with peer ID: {}", services.local_peer_id());
@@ -162,6 +160,11 @@ async fn produce_block(
 
     info!("Producing block at height {}...", new_height);
 
+    // Collect pending messages
+    let pending_messages = services.collect_pending_messages()?;
+    let message_count = pending_messages.len();
+    let message_ids: Vec<[u8; 32]> = pending_messages.iter().map(|m| m.id).collect();
+
     // Create block header
     let header = BlockHeader {
         height: new_height,
@@ -170,11 +173,10 @@ async fn produce_block(
         message_root: [0u8; 32], // Placeholder for M3
     };
 
-    // For M1, we create blocks with empty message lists
-    // In future: collect pending messages from MessageStore
+    // Create block with messages
     let block = Block {
         header,
-        message_ids: vec![],
+        message_ids,
     };
 
     let block_hash = block.hash();
@@ -190,6 +192,9 @@ async fn produce_block(
         .save_metadata(new_height, *block_hash.as_bytes())
         .map_err(|e| NodeError::block_production(format!("Failed to save metadata: {}", e)))?;
 
+    // Clear pending messages
+    services.clear_pending_messages()?;
+
     // Publish to network
     services
         .network
@@ -201,8 +206,8 @@ async fn produce_block(
     state.last_hash = *block_hash.as_bytes();
 
     info!(
-        "Block {} produced and published",
-        new_height
+        "Block {} produced and published with {} messages",
+        new_height, message_count
     );
 
     Ok(())
