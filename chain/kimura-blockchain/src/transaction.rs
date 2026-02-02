@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 /// A message in the blockchain
-/// Message ID is calculated as: blake3(sender_public_key ++ nonce)
+/// Message ID is calculated as: blake3(sender ++ nonce)
+/// TODO(M3): Update to use actual sender public key bytes instead of string
+/// Current implementation uses sender string for simplicity in M1/M2
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Message {
     /// Message ID (32-byte blake3 hash)
@@ -32,7 +34,8 @@ impl Message {
     }
 
     /// Calculate message ID: blake3(sender ++ nonce)
-    /// In M3, this will be updated to use the actual public key
+    /// TODO(M3): Update to use actual sender public key bytes for cryptographic security
+    /// Current implementation uses sender string for simplicity in M1/M2
     pub fn calculate_id(sender: &str, nonce: u64) -> [u8; 32] {
         let mut hasher = blake3::Hasher::new();
 

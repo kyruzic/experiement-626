@@ -10,6 +10,9 @@ pub struct BlockHeader {
     /// Hash of the previous block (32 bytes)
     pub prev_hash: [u8; 32],
     /// Merkle root of message IDs (placeholder for now, 32 bytes)
+    /// TODO(M3): Implement actual Merkle tree computation from message_ids
+    /// Current implementation uses placeholder zeros - this doesn't affect M1/M2
+    /// but should be fixed when cryptographic verification is added in M3
     pub message_root: [u8; 32],
 }
 
