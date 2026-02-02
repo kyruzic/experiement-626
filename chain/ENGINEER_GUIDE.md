@@ -264,6 +264,7 @@ chain/
 ├── blockchain.py          # Your CLI
 ├── kimura.py             # RPC testing (post-M4)
 ├── MVP_PLAN.md           # Milestone plan
+├── WORK_IN_PROGRESS.md   # Current implementation status and deliverables
 ├── ENGINEER_GUIDE.md     # This file
 ├── Cargo.toml            # Rust workspace
 ├── kimura-node/          # Main node binary
@@ -275,6 +276,7 @@ chain/
 ### Getting Help
 
 - Review `MVP_PLAN.md` for milestone details
+- Check `WORK_IN_PROGRESS.md` for current implementation status and deliverables
 - Check `ENGINEER_GUIDE.md` for coding standards
 - Use `python3 blockchain.py <command> --help` for CLI help
 
